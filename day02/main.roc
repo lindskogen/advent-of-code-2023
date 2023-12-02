@@ -11,71 +11,76 @@ app "day02"
     ]
     provides [main] to pf
 
+GameSet : { red : Nat, blue : Nat, green : Nat }
+Game : { gameId : Nat, reveals : List GameSet }
+
+emptySet : GameSet
+emptySet = { red: 0, blue: 0, green: 0 }
+
+parseReveal = \part ->
+    { before: s1, after: color } <- Str.splitFirst (Str.trim part) " " |> Result.try
+    count <- Str.toNat s1 |> Result.try
+    Ok (color, count)
+
 parseReveals = \s ->
     reveals = Str.split (Str.trim s) ", "
 
-    pairs = List.map reveals \part ->
-        when Str.split (Str.trim part) " " is
-            [s1, color] ->
-                count = Str.toNat s1 |> Result.withDefault 0
-                (color, count)
+    pairs <- (List.mapTry reveals parseReveal) |> Result.try
 
-            _ -> crash "invalid"
+    a = List.walk pairs emptySet \acc, (color, count) ->
+        when color is
+            "red" -> { acc & red: count }
+            "blue" -> { acc & blue: count }
+            "green" -> { acc & green: count }
+            _ -> crash "unknown color \(color)"
+    Ok a
 
-    dict = Dict.fromList pairs
-
-    {
-        red: (Dict.get dict "red") |> Result.withDefault 0,
-        blue: (Dict.get dict "blue") |> Result.withDefault 0,
-        green: (Dict.get dict "green") |> Result.withDefault 0,
-    }
-
+power : GameSet -> Nat
 power = \{ red, blue, green } ->
     red * blue * green
 
+isPossible : GameSet -> Bool
 isPossible = \{ red, blue, green } ->
     red <= 12 && green <= 13 && blue <= 14
 
+parseInput : Str -> Result (List Game) [InvalidNumStr, NotFound]
 parseInput = \input ->
     lines = Str.split input "\n"
-    List.map lines \line ->
-        gameIdAndRest = Str.split line ": "
-        gameId = Str.toNat ((List.get (Str.split (List.get gameIdAndRest 0 |> Result.withDefault "") " ") 1) |> Result.withDefault "") |> Result.withDefault 0
-        reveals = List.map (Str.split (List.get gameIdAndRest 1 |> Result.withDefault "") "; ") parseReveals
+    List.mapTry lines \line ->
+        { before: beforeGameId, after: rest } <- Str.splitFirst line ": " |> Result.try
+        { after: gameIdStr } <- Str.splitFirst beforeGameId " " |> Result.try
+        gameId <- Str.toNat gameIdStr |> Result.try
+        reveals <- (List.mapTry (Str.split rest "; ") parseReveals) |> Result.try
 
-        (gameId, reveals)
+        Ok { gameId, reveals }
 
 part1 = \input ->
-    games = parseInput input
+    games <- parseInput input |> Result.try
 
-    List.keepIf games (\(_gameId, reveals) -> List.all reveals isPossible)
-    |> List.map \(gameId, _) -> gameId
+    List.keepIf games (\{ reveals } -> List.all reveals isPossible)
+    |> List.map .gameId
     |> List.sum
+    |> Ok
 
-maxCube = \prev, elem -> {
-    red: Num.max prev.red elem.red,
-    green: Num.max prev.green elem.green,
-    blue: Num.max prev.blue elem.blue,
+maxCube = \c1, c2 -> {
+    red: Num.max c1.red c2.red,
+    green: Num.max c1.green c2.green,
+    blue: Num.max c1.blue c2.blue,
 }
 
 minCubes = \reveals ->
-    (
-        List.walk
-            reveals
-            { red: 0, blue: 0, green: 0 }
-            maxCube
-    )
+    List.walk reveals emptySet maxCube
     |> power
 
 part2 = \input ->
-    games = parseInput input
-    List.sum (List.map (List.map games .1) minCubes)
+    games <- parseInput input |> Result.try
+    List.sum (List.map (List.map games .reveals) minCubes) |> Ok
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
 
-    p1 = part1 input
-    p2 = part2 input
+    p1 <- part1 input |> Task.fromResult |> Task.await
+    p2 <- part2 input |> Task.fromResult |> Task.await
 
     Stdout.line
         """
@@ -92,8 +97,8 @@ main =
 
         Stderr.line "Something went wrong!"
 
-expect part1 simple == 8
-expect part2 simple == 2286
+expect part1 simple == Ok 8
+expect part2 simple == Ok 2286
 
 simple =
     """
