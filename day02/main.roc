@@ -69,7 +69,7 @@ minCubes = \reveals ->
 
 part2 = \input ->
     games = parseInput input
-    List.sum (List.map (List.map games \(_, reveals) -> reveals) minCubes)
+    List.sum (List.map (List.map games .1) minCubes)
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
