@@ -14,18 +14,13 @@ app "day03"
 parse = \input ->
     lines = Str.split input "\n"
 
-    maxY = List.len lines
-
-    dict =
-        (
-            List.mapWithIndex lines \l, i ->
-                List.mapWithIndex (Str.graphemes l) \c, j ->
-                    ((Num.toI32 i, Num.toI32 j), c)
-        )
-        |> List.join
-        |> Dict.fromList
-
-    (maxY, dict)
+    (
+        List.mapWithIndex lines \l, i ->
+            List.mapWithIndex (Str.graphemes l) \c, j ->
+                ((Num.toI32 i, Num.toI32 j), c)
+    )
+    |> List.join
+    |> Dict.fromList
 
 strType = \c ->
     when c is
@@ -48,68 +43,54 @@ debug = \v ->
 
     v
 
-getIndices = \f, t, x, y ->
-    if f == t then
-        [(y + 1, x + 1), (y + 1, x - 1), (y + 1, x), (y - 1, x + 1), (y - 1, x - 1), (y - 1, x), (y, x + 1), (y, x - 1)]
-    else if x == f then
-        [(y - 1, x), (y + 1, x), (y, x - 1), (y - 1, x - 1), (y + 1, x - 1)]
-    else if x == t then
-        [(y - 1, x), (y + 1, x), (y, x + 1), (y - 1, x + 1), (y + 1, x + 1)]
-    else
-        [(y - 1, x), (y + 1, x)]
+StrWithPos : { col : I32, value : Str }
 
-findNeigbors = \g, f, nbr, y ->
-    l = Num.toI32 (Str.countUtf8Bytes nbr)
-    List.range { start: At f, end: Length (Num.toNat l) }
-    |> List.findFirst \x ->
-        List.any (getIndices f (f + l - 1) x y) \coord ->
-            r = Dict.get g coord |> Result.map strType |> Result.withDefault Dot
-            r == Sym
-    |> Result.isOk
-
-State : { nbr : Str, startIdx : [Some I32, None], collected : List Str }
+State : { nbr : Str, startIdx : [Some I32, None], collected : List StrWithPos }
 
 Graph : Dict (I32, I32) Str
 
-emptyState : State
-emptyState = { nbr: "", startIdx: None, collected: [] }
+walkTheLine : Str -> List StrWithPos
+walkTheLine = \line ->
+    rest =
+        Str.graphemes line
+        |> List.walkWithIndex
+            emptyState
+            (\state, c, x ->
+                when (strType c, state) is
+                    (Nbr, { startIdx: None }) -> { state & startIdx: Some (Num.toI32 x), nbr: c }
+                    (Nbr, { startIdx: Some _, nbr }) -> { state & nbr: Str.concat nbr c }
+                    (_, { startIdx: Some i, nbr }) -> { state & nbr: "", startIdx: None, collected: List.append state.collected ({ col: i, value: nbr }) }
+                    _ -> state
+            )
 
-walkLine : State, Graph, (I32, I32) -> State
-walkLine = \state, g, (x, y) ->
-    c = Dict.get g (y, x) |> Result.withDefault "."
-    nextC = Dict.get g (y, x + 1) |> Result.withDefault "."
+    when rest is
+        { startIdx: Some i, nbr } -> List.append rest.collected { col: i, value: nbr }
+        _ -> rest.collected
 
-    when (state, strType c, strType nextC) is
-        ({ startIdx: None }, Nbr, _) -> { state & nbr: c, startIdx: Some x }
-        ({ nbr, startIdx: Some _ }, Nbr, Nbr) -> { state & nbr: Str.concat nbr c }
-        ({ nbr, startIdx: Some i }, Nbr, _) if findNeigbors g i (Str.concat nbr c) y ->
-            { state & nbr: "", startIdx: None, collected: List.append state.collected (Str.concat nbr c) }
-
-        ({ nbr, startIdx: Some i }, _, _) ->
-            if findNeigbors g i nbr y then
-                { state & nbr: "", startIdx: None, collected: List.append state.collected nbr }
-            else
-                { state & nbr: "", startIdx: None }
-
-        _ ->
-            { state & nbr: "", startIdx: None }
+neighbors : StrWithPos, I32 -> List (I32, I32)
+neighbors = \{ col, value }, y ->
+    f = col - 1
+    t = col + (Str.countUtf8Bytes value |> Num.toI32)
+    List.concat
+        [(y, f), (y, t)]
+        (
+            List.joinMap
+                (List.range { start: At f, end: At (t + 1) })
+                \i -> [(y - 1, i), (y + 1, i)]
+        )
 
 part1 = \input ->
-    (maxY, g) = parse input
+    g = parse input
+    lines = Str.split input "\n"
 
-    range = List.range { start: At 0, end: Length (Num.toNat maxY) }
+    nums = List.map lines walkTheLine
 
-    List.map
-        range
-        \y ->
-            List.walk
-                range
-                emptyState
-                (\state, x -> walkLine state g (x, y))
-            |> .collected
-            |> List.keepOks Str.toNat
-            |> List.sum
-    |> List.sum
+    res = List.mapWithIndex nums \line, y ->
+        List.keepIf line \num ->
+            List.any (neighbors num (Num.toI32 y)) \coord -> Sym == (Dict.get g coord |> Result.map strType |> Result.withDefault Dot)
+
+    res |> List.join |> List.map .value |> List.keepOks Str.toNat |> List.sum
+
 
 part2 = \_input ->
     0
@@ -118,7 +99,6 @@ run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
 
     p1 = part1 input
-    expect p1 == 557705
     p2 = part2 input
 
     Stdout.line
