@@ -15,10 +15,6 @@ parse = \input ->
     lines = Str.split input "\n"
 
     maxY = List.len lines
-    maxX =
-        when lines is
-            [l1, ..] -> Str.countUtf8Bytes l1
-            _ -> crash "Lines is empty"
 
     dict =
         (
@@ -29,7 +25,7 @@ parse = \input ->
         |> List.join
         |> Dict.fromList
 
-    ((Num.toI32 maxX, Num.toI32 maxY), dict)
+    (maxY, dict)
 
 strType = \c ->
     when c is
@@ -46,8 +42,16 @@ strType = \c ->
         "." -> Dot
         _ -> Sym
 
+debug = \v ->
+    dbg
+        v
+
+    v
+
 getIndices = \f, t, x, y ->
-    if x == f then
+    if f == t then
+        [(y + 1, x + 1), (y + 1, x - 1), (y + 1, x), (y - 1, x + 1), (y - 1, x - 1), (y - 1, x), (y, x + 1), (y, x - 1)]
+    else if x == f then
         [(y - 1, x), (y + 1, x), (y, x - 1), (y - 1, x - 1), (y + 1, x - 1)]
     else if x == t then
         [(y - 1, x), (y + 1, x), (y, x + 1), (y - 1, x + 1), (y + 1, x + 1)]
@@ -55,66 +59,57 @@ getIndices = \f, t, x, y ->
         [(y - 1, x), (y + 1, x)]
 
 findNeigbors = \g, f, nbr, y ->
-    l = Num.toI32 (Str.countUtf8Bytes nbr) + 1
-    List.range { start: At f, end: At (f + l) }
+    l = Num.toI32 (Str.countUtf8Bytes nbr)
+    List.range { start: At f, end: Length (Num.toNat l) }
     |> List.findFirst \x ->
-        List.any (getIndices f (f + l) x y) \coord ->
-            dbg
-                (x, f, (f + l), coord, Dict.get g coord)
-
+        List.any (getIndices f (f + l - 1) x y) \coord ->
             r = Dict.get g coord |> Result.map strType |> Result.withDefault Dot
             r == Sym
     |> Result.isOk
 
-State : { nbr : Str, startIdx : [Some I32, None], row : I32, collected : List Str }
+State : { nbr : Str, startIdx : [Some I32, None], collected : List Str }
 
 Graph : Dict (I32, I32) Str
+
+emptyState : State
+emptyState = { nbr: "", startIdx: None, collected: [] }
 
 walkLine : State, Graph, (I32, I32) -> State
 walkLine = \state, g, (x, y) ->
     c = Dict.get g (y, x) |> Result.withDefault "."
     nextC = Dict.get g (y, x + 1) |> Result.withDefault "."
 
-    dbg
-        (state, c, nextC)
-
     when (state, strType c, strType nextC) is
-        ({ startIdx: None }, Nbr, _) -> { state & nbr: c, startIdx: Some x, row: y }
+        ({ startIdx: None }, Nbr, _) -> { state & nbr: c, startIdx: Some x }
         ({ nbr, startIdx: Some _ }, Nbr, Nbr) -> { state & nbr: Str.concat nbr c }
         ({ nbr, startIdx: Some i }, Nbr, _) if findNeigbors g i (Str.concat nbr c) y ->
             { state & nbr: "", startIdx: None, collected: List.append state.collected (Str.concat nbr c) }
 
-        _ -> { state & nbr: "", startIdx: None }
+        ({ nbr, startIdx: Some i }, _, _) ->
+            if findNeigbors g i nbr y then
+                { state & nbr: "", startIdx: None, collected: List.append state.collected nbr }
+            else
+                { state & nbr: "", startIdx: None }
+
+        _ ->
+            { state & nbr: "", startIdx: None }
 
 part1 = \input ->
-    ((maxX, maxY), g) = parse input
+    (maxY, g) = parse input
 
-    collected =
-        List.joinMap
-            (
-                List.range { start: At 0, end: Length (Num.toNat maxY) }
-            )
-            \y ->
-                (
-                    List.walk
-                        (List.range { start: At 0, end: Length (Num.toNat maxX) })
-                        {
-                            nbr: "",
-                            startIdx: None,
-                            row: 0,
-                            collected: [],
-                        }
-                        \state, x -> walkLine state g (x, y))
-                |> .collected
+    range = List.range { start: At 0, end: Length (Num.toNat maxY) }
 
-    # dbg
-    #     collected
-
-    oks = List.keepOks collected Str.toNat
-
-    expect List.len oks == List.len collected
-
-    oks |> List.sum
+    List.map
+        range
+        \y ->
+            List.walk
+                range
+                emptyState
+                (\state, x -> walkLine state g (x, y))
+            |> .collected
+            |> List.keepOks Str.toNat
+            |> List.sum
+    |> List.sum
 
 part2 = \_input ->
     0
@@ -123,6 +118,7 @@ run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
 
     p1 = part1 input
+    expect p1 == 557705
     p2 = part2 input
 
     Stdout.line
@@ -144,12 +140,16 @@ expect
     r = part1 simple
     r == 4361
 
+expect
+    r = part1 simple2
+    r == 4366
+
 simple =
     """
     467..114..
     ...*......
     ..35..633.
-    ......#..5
+    ......#...
     617*......
     .....+.58.
     ..592.....
@@ -157,3 +157,18 @@ simple =
     ...$.*....
     .664.598..
     """
+
+simple2 =
+    """
+    467..114..
+    ..5*......
+    ..35..633.
+    ......#...
+    617*......
+    .....+.58.
+    ..592.....
+    ......755.
+    ...$.*....
+    .664.598..
+    """
+
