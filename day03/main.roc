@@ -14,13 +14,22 @@ app "day03"
 parse = \input ->
     lines = Str.split input "\n"
 
-    (
-        List.mapWithIndex lines \l, i ->
-            List.mapWithIndex (Str.graphemes l) \c, j ->
-                ((Num.toI32 i, Num.toI32 j), c)
-    )
-    |> List.join
-    |> Dict.fromList
+    maxY = List.len lines
+    maxX =
+        when lines is
+            [l1, ..] -> Str.countUtf8Bytes l1
+            _ -> crash "Lines is empty"
+
+    dict =
+        (
+            List.mapWithIndex lines \l, i ->
+                List.mapWithIndex (Str.graphemes l) \c, j ->
+                    ((Num.toI32 i, Num.toI32 j), c)
+        )
+        |> List.join
+        |> Dict.fromList
+
+    ((Num.toI32 maxX, Num.toI32 maxY), dict)
 
 strType = \c ->
     when c is
@@ -46,47 +55,60 @@ getIndices = \f, t, x, y ->
         [(y - 1, x), (y + 1, x)]
 
 findNeigbors = \g, f, nbr, y ->
-    l = Num.toI32 (Str.countUtf8Bytes nbr)+1
-    List.range { start: At f, end: At (f+l) }
+    l = Num.toI32 (Str.countUtf8Bytes nbr) + 1
+    List.range { start: At f, end: At (f + l) }
     |> List.findFirst \x ->
         List.any (getIndices f (f + l) x y) \coord ->
-            dbg (x, f, (f + l), coord, Dict.get g coord)
+            dbg
+                (x, f, (f + l), coord, Dict.get g coord)
+
             r = Dict.get g coord |> Result.map strType |> Result.withDefault Dot
             r == Sym
     |> Result.isOk
 
-part1 = \input ->
-    g = parse input
+State : { nbr : Str, startIdx : [Some I32, None], row : I32, collected : List Str }
 
-    { collected } = Dict.walk g ({ nbr: "", startIdx: None, row: 0, collected: [] }) \st, (y, x), c ->
-        dbg (st, c, y)
+Graph : Dict (I32, I32) Str
 
-        state =
-            when st is
-                { nbr, startIdx: Some i } if st.row != y -> 
-                    if findNeigbors g i nbr y then
-                        { st & startIdx: None, nbr: "", collected: List.append st.collected nbr }
-                    else
-                        { st & startIdx: None, nbr: "" }
-
-                _ -> st
-
-        newState =
-            when (state, strType c) is
-                ({ startIdx: None }, Nbr) -> { state & nbr: c, startIdx: Some x, row: y }
-                ({ nbr, startIdx: Some _ }, Nbr) -> { state & nbr: Str.concat nbr c }
-                ({ nbr, startIdx: Some i }, _) if findNeigbors g i nbr y ->
-                    { state & nbr: "", startIdx: None, collected: List.append state.collected nbr }
-
-                _ -> { state & nbr: "", startIdx: None }
-
-        dbg
-            newState
-
-        newState
+walkLine : State, Graph, (I32, I32) -> State
+walkLine = \state, g, (x, y) ->
+    c = Dict.get g (y, x) |> Result.withDefault "."
+    nextC = Dict.get g (y, x + 1) |> Result.withDefault "."
 
     dbg
-        collected
+        (state, c, nextC)
+
+    when (state, strType c, strType nextC) is
+        ({ startIdx: None }, Nbr, _) -> { state & nbr: c, startIdx: Some x, row: y }
+        ({ nbr, startIdx: Some _ }, Nbr, Nbr) -> { state & nbr: Str.concat nbr c }
+        ({ nbr, startIdx: Some i }, Nbr, _) if findNeigbors g i (Str.concat nbr c) y ->
+            { state & nbr: "", startIdx: None, collected: List.append state.collected (Str.concat nbr c) }
+
+        _ -> { state & nbr: "", startIdx: None }
+
+part1 = \input ->
+    ((maxX, maxY), g) = parse input
+
+    collected =
+        List.joinMap
+            (
+                List.range { start: At 0, end: Length (Num.toNat maxY) }
+            )
+            \y ->
+                (
+                    List.walk
+                        (List.range { start: At 0, end: Length (Num.toNat maxX) })
+                        {
+                            nbr: "",
+                            startIdx: None,
+                            row: 0,
+                            collected: [],
+                        }
+                        \state, x -> walkLine state g (x, y))
+                |> .collected
+
+    # dbg
+    #     collected
 
     oks = List.keepOks collected Str.toNat
 
