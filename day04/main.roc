@@ -43,53 +43,23 @@ part1 = \input ->
 
     List.sum cardScore
 
-recur = \lookup, id ->
-    cards = Dict.get lookup id |> Result.withDefault []
-    1 + List.sum (List.map cards \c -> recur lookup c)
-
-getOrCalculate : Dict a b, a, ({} -> b) -> { updatedCache : Dict a b, value : b }
-getOrCalculate = \cache, id, calculateFn ->
-    when Dict.get cache id is
-        Ok v ->
-            { updatedCache: cache, value: v }
-
-        Err KeyNotFound ->
-            v = calculateFn {}
-            { updatedCache: Dict.insert cache id v, value: v }
-
-recurCached = \lookup, id, cache ->
-    getOrCalculate cache id \_ ->
-        recur lookup id
 
 part2 = \input ->
     cards = List.map (Str.split input "\n") parse
 
-    maxLen = List.len cards
+    process = \stack, initialTally, initialCache ->
+        (tally, cache), card <- stack |> List.walk (initialTally, initialCache)
+        when Dict.get cache card.id is
+            Ok subTally ->
+                (tally + subTally + 1, cache)
+            Err KeyNotFound ->
+                (subTally, newCache) = 
+                    cards 
+                        |> List.sublist { start: card.id, len: numberOfWins card }
+                        |> process 0 cache
+                (tally + subTally + 1, Dict.insert newCache card.id subTally)
 
-    cardIds = List.map cards .id |> List.reverse
-
-    lookup = List.walk
-        cards
-        (Dict.empty {})
-        \state, { id, nums, wins } ->
-
-            count = numberOfWins { nums, wins }
-
-            last = Num.min maxLen (id + count)
-
-            additionalCards = List.range { start: After id, end: At last }
-
-            Dict.insert state id additionalCards
-
-    { numCards } = List.walk
-        cardIds
-        { numCards: 0, cache: Dict.empty {} }
-        \state, id ->
-            { value, updatedCache } = recurCached lookup id state.cache
-
-            { state & numCards: (state.numCards + value), cache: updatedCache }
-
-    numCards
+    cards |> process 0 (Dict.empty {}) |> .0
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
