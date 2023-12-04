@@ -20,7 +20,7 @@ parse = \s ->
                     _ -> crash "id str: \(cardIdStr)"
             when Str.split data " | " is
                 [wins, numbers] ->
-                    parsedNums = Str.split numbers " " |> List.map Str.trim |> List.keepOks Str.toNat
+                    parsedNums = Str.split numbers " " |> List.map Str.trim |> List.keepOks Str.toNat |> Set.fromList
                     parsedWins = Str.split wins " " |> List.map Str.trim |> List.keepOks Str.toNat |> Set.fromList
                     { id, nums: parsedNums, wins: parsedWins }
 
@@ -28,15 +28,17 @@ parse = \s ->
 
         _ -> crash ""
 
+numberOfWins = \{ nums, wins } ->
+    Set.intersection wins nums |> Set.len
+
 part1 = \input ->
     cards = List.map (Str.split input "\n") parse
 
-    cardScore = List.map cards \{ nums, wins } ->
-        count = List.countIf nums \n -> Set.contains wins n
+    cardScore = List.map cards \card ->
+        count = numberOfWins card
 
         when count is
             0 -> 0
-            1 -> 1
             c -> Num.powInt 2 (c - 1)
 
     List.sum cardScore
@@ -44,6 +46,20 @@ part1 = \input ->
 recur = \lookup, id ->
     cards = Dict.get lookup id |> Result.withDefault []
     1 + List.sum (List.map cards \c -> recur lookup c)
+
+getOrCalculate : Dict a b, a, ({} -> b) -> { updatedCache : Dict a b, value : b }
+getOrCalculate = \cache, id, calculateFn ->
+    when Dict.get cache id is
+        Ok v ->
+            { updatedCache: cache, value: v }
+
+        Err KeyNotFound ->
+            v = calculateFn {}
+            { updatedCache: Dict.insert cache id v, value: v }
+
+recurCached = \lookup, id, cache ->
+    getOrCalculate cache id \_ ->
+        recur lookup id
 
 part2 = \input ->
     cards = List.map (Str.split input "\n") parse
@@ -57,7 +73,7 @@ part2 = \input ->
         (Dict.empty {})
         \state, { id, nums, wins } ->
 
-            count = List.countIf nums \n -> Set.contains wins n
+            count = numberOfWins { nums, wins }
 
             last = Num.min maxLen (id + count)
 
@@ -69,17 +85,9 @@ part2 = \input ->
         cardIds
         { numCards: 0, cache: Dict.empty {} }
         \state, id ->
-            when Dict.get state.cache id is
-                Ok v ->
-                    dbg (Hit, id, v)
+            { value, updatedCache } = recurCached lookup id state.cache
 
-                    { state & numCards: (state.numCards + v) }
-
-                Err KeyNotFound ->
-                
-                    extraCards = recur lookup id
-                    dbg (Miss, id, extraCards)
-                    { state & numCards: (state.numCards + extraCards), cache: Dict.insert state.cache id extraCards }
+            { state & numCards: (state.numCards + value), cache: updatedCache }
 
     numCards
 
