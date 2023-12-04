@@ -14,13 +14,18 @@ app "day03"
 parse = \input ->
     lines = Str.split input "\n"
 
-    (
-        List.mapWithIndex lines \l, i ->
-            List.mapWithIndex (Str.graphemes l) \c, j ->
-                ((Num.toI32 i, Num.toI32 j), c)
-    )
-    |> List.join
-    |> Dict.fromList
+    nums = List.map lines walkTheLine
+
+    g =
+        (
+            List.mapWithIndex lines \l, i ->
+                List.mapWithIndex (Str.graphemes l) \c, j ->
+                    ((Num.toI32 i, Num.toI32 j), c)
+        )
+        |> List.join
+        |> Dict.fromList
+
+    (g, nums)
 
 strType = \c ->
     when c is
@@ -35,7 +40,7 @@ strType = \c ->
         "9" -> Nbr
         "0" -> Nbr
         "." -> Dot
-        _ -> Sym
+        s -> Sym s
 
 debug = \v ->
     dbg
@@ -47,7 +52,8 @@ StrWithPos : { col : I32, value : Str }
 
 State : { nbr : Str, startIdx : [Some I32, None], collected : List StrWithPos }
 
-Graph : Dict (I32, I32) Str
+emptyState : State
+emptyState = { nbr: "", startIdx: None, collected: [] }
 
 walkTheLine : Str -> List StrWithPos
 walkTheLine = \line ->
@@ -79,21 +85,47 @@ neighbors = \{ col, value }, y ->
                 \i -> [(y - 1, i), (y + 1, i)]
         )
 
-part1 = \input ->
-    g = parse input
-    lines = Str.split input "\n"
+isSym = \s ->
+    when s is
+        Sym _ -> Bool.true
+        _ -> Bool.false
 
-    nums = List.map lines walkTheLine
+part1 = \input ->
+    (g, nums) = parse input
 
     res = List.mapWithIndex nums \line, y ->
         List.keepIf line \num ->
-            List.any (neighbors num (Num.toI32 y)) \coord -> Sym == (Dict.get g coord |> Result.map strType |> Result.withDefault Dot)
+            List.any (neighbors num (Num.toI32 y)) \coord -> isSym (Dict.get g coord |> Result.map strType |> Result.withDefault Dot)
 
     res |> List.join |> List.map .value |> List.keepOks Str.toNat |> List.sum
 
+part2 = \input ->
+    (g, nums) = parse input
 
-part2 = \_input ->
-    0
+    res =
+
+        List.walkWithIndex nums (Dict.empty {}) \state, line, y ->
+            List.walk line state \pos, num ->
+
+                List.walkUntil (neighbors num (Num.toI32 y)) pos \collected, coord ->
+                    when (Dict.get g coord |> Result.map strType |> Result.withDefault Dot) is
+                        Sym "*" ->
+                            Break
+                                (
+                                    Dict.update collected coord \found ->
+                                        when found is
+                                            Missing -> Present ([num.value])
+                                            Present vs -> Present (List.append vs num.value)
+                                )
+
+                        Sym _ -> Break collected
+                        _ -> Continue collected
+
+    res
+    |> Dict.walk 0 \acc, _, vs ->
+        when vs is
+            [_, _] -> acc + List.product (List.keepOks vs Str.toNat)
+            _ -> acc
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
@@ -119,6 +151,10 @@ main =
 expect
     r = part1 simple
     r == 4361
+
+expect
+    r = part2 simple
+    r == 467835
 
 expect
     r = part1 simple2
