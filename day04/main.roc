@@ -50,6 +50,8 @@ part2 = \input ->
 
     maxLen = List.len cards
 
+    cardIds = List.map cards .id |> List.reverse
+
     lookup = List.walk
         cards
         (Dict.empty {})
@@ -63,15 +65,20 @@ part2 = \input ->
 
             Dict.insert state id additionalCards
 
-    { numCards } = Dict.walk
-        lookup
+    { numCards } = List.walk
+        cardIds
         { numCards: 0, cache: Dict.empty {} }
-        \state, id, _ ->
-            c = Dict.get state.cache id
-            when c is
-                Ok v -> { state & numCards: (state.numCards + v) }
-                _ ->
+        \state, id ->
+            when Dict.get state.cache id is
+                Ok v ->
+                    dbg (Hit, id, v)
+
+                    { state & numCards: (state.numCards + v) }
+
+                Err KeyNotFound ->
+                
                     extraCards = recur lookup id
+                    dbg (Miss, id, extraCards)
                     { state & numCards: (state.numCards + extraCards), cache: Dict.insert state.cache id extraCards }
 
     numCards
