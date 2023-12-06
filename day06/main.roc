@@ -12,29 +12,33 @@ app "day00"
     provides [main] to pf
 
 parseNums = \s ->
-    Str.split s " " |> List.dropFirst 1
-     |> List.keepOks \n ->(n |> Str.trim |> Str.toNat)
+    Str.split s " "
+    |> List.dropFirst 1
+    |> List.keepOks \n -> (n |> Str.trim |> Str.toNat)
 
 parse = \input ->
     s = Str.replaceEach (Str.replaceEach input "  " " ") "  " " "
 
-    (ts, ds) = when Str.split s "\n" is
-        [a, b] -> (parseNums a, parseNums b)
-        _ -> crash "failed to split lines"
-    
+    (ts, ds) =
+        when Str.split s "\n" is
+            [a, b] -> (parseNums a, parseNums b)
+            _ -> crash "failed to split lines"
+
     List.map2 ts ds \t, d ->
         (t, d)
 
 parse2 = \input ->
     trimmed = Str.replaceEach input " " ""
 
-    lines = Str.split trimmed "\n" 
-        |> List.joinMap (\s -> Str.split s ":" |> List.dropFirst 1) 
+    lines =
+        Str.split trimmed "\n"
+        |> List.joinMap (\s -> Str.split s ":" |> List.dropFirst 1)
         |> List.keepOks Str.toNat
 
-    (t, d) = when lines is
-        [a, b] -> (a, b)
-        _ -> crash "failed to split lines"
+    (t, d) =
+        when lines is
+            [a, b] -> (a, b)
+            _ -> crash "failed to split lines"
 
     (t, d)
 
