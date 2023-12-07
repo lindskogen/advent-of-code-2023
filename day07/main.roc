@@ -50,21 +50,17 @@ countCards = \ss ->
                 Missing -> Present 1
                 Present c -> Present (c + 1)
 
+sortCardCounts = \cc ->
+    List.sortDesc (Dict.values cc)
+
 optimizeHand = \counts ->
     jokers = Dict.get counts "J" |> Result.withDefault 0
 
     if jokers > 0 && Dict.len counts > 1 then
-        l =
-            Dict.remove counts "J"
-            |> Dict.values
-            |> List.sortDesc
-
-
+        l = sortCardCounts (Dict.remove counts "J")
         List.update l 0 \c -> c + jokers
     else
-        counts
-        |> Dict.values
-        |> List.sortDesc
+        sortCardCounts counts
 
 type = \ss, rule ->
     counts = countCards ss
@@ -72,7 +68,7 @@ type = \ss, rule ->
     values =
         when rule is
             Wildcard -> optimizeHand counts
-            Normal -> List.sortDesc (Dict.values counts)
+            Normal -> sortCardCounts counts
 
     when values is
         [5] -> FiveOfAKind
