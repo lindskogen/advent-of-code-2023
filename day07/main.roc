@@ -60,9 +60,7 @@ optimizeHand = \counts ->
             |> List.sortDesc
 
 
-        when List.get l 0 is
-            Ok c -> List.concat [c + jokers] (List.dropFirst l 1)
-            Err _ -> crash "no items in list"
+        List.update l 0 \c -> c + jokers
     else
         counts
         |> Dict.values
