@@ -11,21 +11,19 @@ app "day03"
     ]
     provides [main] to pf
 
+StrWithPos : { str : Str, f : I32, t : I32, y : I32 }
+CharWithPos : { str : Str, x : I32, y : I32 }
+
+State : { nums : List StrWithPos, symbols : List CharWithPos }
+
+parse : Str -> State
 parse = \input ->
-    lines = Str.split input "\n"
+    objects = { nums: [], symbols: [] }
 
-    nums = List.map lines walkTheLine
-
-    g =
-        (
-            List.mapWithIndex lines \l, i ->
-                List.mapWithIndex (Str.graphemes l) \c, j ->
-                    ((Num.toI32 i, Num.toI32 j), c)
-        )
-        |> List.join
-        |> Dict.fromList
-
-    (g, nums)
+    input
+    |> Str.trim
+    |> Str.split "\n"
+    |> List.walkWithIndex objects walkTheLine
 
 strType = \c ->
     when c is
@@ -42,90 +40,103 @@ strType = \c ->
         "." -> Dot
         s -> Sym s
 
-debug = \v ->
-    dbg
-        v
+Workstate : { state : State, y : I32, nbr : Str }
 
-    v
+walkTheLine : State, Str, Nat -> State
+walkTheLine = \st, line, y ->
+    state = { state: st, y: Num.toI32 y, nbr: "" }
 
-StrWithPos : { col : I32, value : Str }
+    Str.graphemes line
+    |> List.walkWithIndex state parseChar
+    |> addNumber (Num.toI32 (Str.countUtf8Bytes line))
+    |> .state
 
-State : { nbr : Str, startIdx : [Some I32, None], collected : List StrWithPos }
+parseChar : Workstate, Str, Nat -> Workstate
+parseChar = \state, c, x ->
+    when strType c is
+        Nbr -> { state & nbr: Str.concat state.nbr c }
+        _ ->
+            state
+            |> addNumber (Num.toI32 x)
+            |> parseSymbol c (Num.toI32 x)
 
-emptyState : State
-emptyState = { nbr: "", startIdx: None, collected: [] }
+addNumber : Workstate, I32 -> Workstate
+addNumber = \state, x ->
+    when state.nbr is
+        "" -> state
+        _ ->
+            len = Num.toI32 (Str.countUtf8Bytes state.nbr)
+            num = { str: state.nbr, f: x - len, t: x - 1, y: state.y }
+            oldState = state.state
+            nums = List.append oldState.nums num
+            newState = { oldState & nums }
+            { state & state: newState, nbr: "" }
 
-walkTheLine : Str -> List StrWithPos
-walkTheLine = \line ->
-    rest =
-        Str.graphemes line
-        |> List.walkWithIndex
-            emptyState
-            (\state, c, x ->
-                when (strType c, state) is
-                    (Nbr, { startIdx: None }) -> { state & startIdx: Some (Num.toI32 x), nbr: c }
-                    (Nbr, { startIdx: Some _, nbr }) -> { state & nbr: Str.concat nbr c }
-                    (_, { startIdx: Some i, nbr }) -> { state & nbr: "", startIdx: None, collected: List.append state.collected ({ col: i, value: nbr }) }
-                    _ -> state
-            )
+parseSymbol : Workstate, Str, I32 -> Workstate
+parseSymbol = \state, c, x ->
+    when strType c is
+        Sym _ ->
+            symbol = { str: c, x, y: state.y }
+            oldState = state.state
+            symbols = List.append oldState.symbols symbol
+            newState = { oldState & symbols }
+            { state & state: newState }
 
-    when rest is
-        { startIdx: Some i, nbr } -> List.append rest.collected { col: i, value: nbr }
-        _ -> rest.collected
+        Dot -> state
+        _ -> crash "missed number \(c)"
 
-neighbors : StrWithPos, I32 -> List (I32, I32)
-neighbors = \{ col, value }, y ->
-    f = col - 1
-    t = col + (Str.countUtf8Bytes value |> Num.toI32)
-    List.concat
-        [(y, f), (y, t)]
-        (
-            List.joinMap
-                (List.range { start: At f, end: At (t + 1) })
-                \i -> [(y - 1, i), (y + 1, i)]
-        )
+numsNearSymbols : State -> List Nat
+numsNearSymbols = \state ->
+    state.nums
+    |> List.keepIf \n -> isNearSymbol n state
+    |> List.map .str
+    |> List.keepOks Str.toNat
 
-isSym = \s ->
-    when s is
-        Sym _ -> Bool.true
-        _ -> Bool.false
+isNearSymbol : StrWithPos, State -> Bool
+isNearSymbol = \n, state ->
+    fromX = n.f - 1
+    toX = n.t + 1
+    fromY = n.y - 1
+    toY = n.y + 1
+
+    List.any state.symbols \sym ->
+        sym.x >= fromX && sym.x <= toX && sym.y >= fromY && sym.y <= toY
+
+gearRatios : State -> List Nat
+gearRatios = \state ->
+    state.symbols
+    |> List.keepIf \s -> s.str == "*"
+    |> List.map \s -> nearbyNumbers s state
+    |> List.keepIf \nums -> List.len nums == 2
+    |> List.map multiplyNums
+
+nearbyNumbers : CharWithPos, State -> List StrWithPos
+nearbyNumbers = \s, state ->
+    fromX = s.x - 1
+    toX = s.x + 1
+    fromY = s.y - 1
+    toY = s.y + 1
+
+    List.keepIf state.nums \n ->
+        n.t >= fromX && n.f <= toX && n.y >= fromY && n.y <= toY
+
+multiplyNums = \nums ->
+    nums
+    |> List.map .str
+    |> List.keepOks Str.toNat
+    |> List.product
 
 part1 = \input ->
-    (g, nums) = parse input
-
-    res = List.mapWithIndex nums \line, y ->
-        List.keepIf line \num ->
-            List.any (neighbors num (Num.toI32 y)) \coord -> isSym (Dict.get g coord |> Result.map strType |> Result.withDefault Dot)
-
-    res |> List.join |> List.map .value |> List.keepOks Str.toNat |> List.sum
+    input
+    |> parse
+    |> numsNearSymbols
+    |> List.sum
 
 part2 = \input ->
-    (g, nums) = parse input
-
-    res =
-
-        List.walkWithIndex nums (Dict.empty {}) \state, line, y ->
-            List.walk line state \pos, num ->
-
-                List.walkUntil (neighbors num (Num.toI32 y)) pos \collected, coord ->
-                    when (Dict.get g coord |> Result.map strType |> Result.withDefault Dot) is
-                        Sym "*" ->
-                            Break
-                                (
-                                    Dict.update collected coord \found ->
-                                        when found is
-                                            Missing -> Present ([num.value])
-                                            Present vs -> Present (List.append vs num.value)
-                                )
-
-                        Sym _ -> Break collected
-                        _ -> Continue collected
-
-    res
-    |> Dict.walk 0 \acc, _, vs ->
-        when vs is
-            [_, _] -> acc + List.product (List.keepOks vs Str.toNat)
-            _ -> acc
+    input
+    |> parse
+    |> gearRatios
+    |> List.sum
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
