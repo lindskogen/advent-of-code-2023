@@ -91,25 +91,17 @@ parseHand = \line, rule ->
 
         _ -> crash "no line"
 
-sortNums = \a, b ->
-    if a > b then
-        GT
-    else if a < b then
-        LT
-    else
-        EQ
-
 sortHands = \hands, rule ->
     List.sortWith hands \a, b ->
         if a.type == b.type then
             zipped = List.map2 (Str.graphemes a.hand) (Str.graphemes b.hand) \aa, bb -> (aa, bb)
 
             List.walkUntil zipped EQ \_st, (aa, bb) ->
-                when sortNums (strength aa rule) (strength bb rule) is
+                when Num.compare (strength aa rule) (strength bb rule) is
                     EQ -> Continue EQ
                     v -> Break v
         else
-            sortNums (typeStr a.type) (typeStr b.type)
+            Num.compare (typeStr a.type) (typeStr b.type)
 
 part1 = \input ->
     lines = Str.split input "\n"
