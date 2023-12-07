@@ -8,6 +8,7 @@ app "day00"
         pf.File,
         pf.Path,
         pf.Task.{ Task },
+        "input" as inputFile: Str
     ]
     provides [main] to pf
 
@@ -144,7 +145,18 @@ main =
 
 expect
     a = part1 simple
-    a == 0
+    a == 6440
+expect
+    a = part2 simple
+    a == 5905
+
+expect
+    a = part1 inputFile
+    a == 251806792
+
+expect
+    a = part2 inputFile
+    a == 252113488
 
 simple =
     """
