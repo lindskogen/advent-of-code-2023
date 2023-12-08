@@ -19,7 +19,7 @@ parseRange = \s ->
     nums = (Str.split s " " |> List.keepOks Str.toI64)
 
     when nums is
-        [dest, src, l] -> { dest: dest, src: src, len: l, diff: dest - src }
+        [dest, src, l] -> { destination: dest, source: src, length: l }
         _ -> crash "nums: \(s)"
 
 parseMap = \input ->
@@ -38,8 +38,8 @@ part1 = \input ->
 
     mappedSeeds = List.walk maps seeds \ss, map ->
         List.map ss \s ->
-            when List.findFirst map \m -> s >= m.src && s <= m.src + m.len is
-                Ok m -> s + m.dest - m.src
+            when List.findFirst map \m -> s >= m.source && s <= m.source + m.length is
+                Ok m -> s + m.destination - m.source
                 Err _ -> s
 
     when List.min mappedSeeds is
@@ -48,58 +48,71 @@ part1 = \input ->
 
 mapSeedRange = \list ->
     when list is
-        [from, l] -> { from: Num.toI64 from, len: Num.toI64 l }
+        [from, l] -> { from: Num.toI64 from, to: from + (Num.toI64 l) + 1 }
         _ -> crash "wrong nbr of seeds"
 
-mapSeedRangeBf = \list ->
-    when list is
-        [from, l] -> List.range { start: At (Num.toI64 from), end: Length (Num.toNat l) }
-        _ -> crash "wrong nbr of seeds"
+processRow = \queue, row ->
+    toRange = { from: row.source, to: row.source + row.length - 1 }
 
-getMappedSeed = \s, m ->
-    newFrom = m.diff + s.from
-    newTo = newFrom + s.len
-    maxMap = m.dest + m.len
+    queue.current
+    |> List.walk { current: [], next: queue.next } \newQueue, fromRange ->
+        { inside, outside } = fitRange fromRange toRange
+        if List.isEmpty inside then
+            { current: List.concat newQueue.current outside, next: newQueue.next }
+        else
+            next = convertRanges inside row
+            { current: List.concat newQueue.current outside, next: List.concat newQueue.next next }
 
-    maxTo = Num.min newTo maxMap
+fitRange = \fromRange, toRange ->
+    if fromRange.to < toRange.from || fromRange.from > toRange.to then
+        { inside: [], outside: [fromRange] }
+    else if fromRange.from >= toRange.from && fromRange.to <= toRange.to then
+        { inside: [fromRange], outside: [] }
+    else if fromRange.from < toRange.from && fromRange.to <= toRange.to then
+        outside = [{ from: fromRange.from, to: toRange.from - 1 }]
+        inside = [{ from: toRange.from, to: fromRange.to }]
+        { outside, inside }
+    else if fromRange.from >= toRange.from && fromRange.to > toRange.to then
+        inside = [{ from: fromRange.from, to: toRange.to }]
+        outside = [{ from: toRange.to + 1, to: fromRange.to }]
+        { inside, outside }
+    else
+        inside = [{ from: toRange.from, to: toRange.to }]
+        outside = [
+            { from: fromRange.from, to: toRange.from - 1 },
+            { from: toRange.to + 1, to: fromRange.to },
+        ]
+        { inside, outside }
 
-    newLen = maxTo - newFrom
+convertRanges = \ranges, row ->
+    ranges
+    |> List.map \range -> {
+        from: range.from - row.source + row.destination,
+        to: range.to - row.source + row.destination,
+    }
 
-    { from: newFrom, len: newLen }
+processTable = \ranges, maps ->
+    newQueue = maps |> List.walk { current: ranges, next: [] } processRow
 
-part2bf = \input ->
-    { seeds, maps } = parse input
-    seedRanges = List.join (List.chunksOf seeds 2 |> List.map mapSeedRangeBf)
-
-    mappedSeeds = List.walk maps seedRanges \ss, map ->
-        List.map ss \s ->
-            when List.findFirst map \m -> s >= m.src && s <= m.src + m.len is
-                Ok m -> s + m.dest - m.src
-                Err _ -> s
-
-    when List.min mappedSeeds is
-        Ok v -> v
-        Err _ -> crash "list empty"
+    List.concat newQueue.current newQueue.next
 
 part2 = \input ->
     { seeds, maps } = parse input
     seedRanges = List.chunksOf seeds 2 |> List.map mapSeedRange
 
-    mappedSeeds = List.walk maps seedRanges \ss, map ->
-        List.map ss \s ->
-            when List.findFirst map \m -> s.from >= m.src && s.from + s.len <= m.src + m.len is
-                Ok m -> getMappedSeed s m
-                Err _ -> s
+    list =
+        List.walk maps seedRanges processTable
+        |> List.map .from
 
-    when List.min (List.map mappedSeeds .from) is
+    when List.min list is
         Ok v -> v
         Err _ -> crash "list empty"
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
 
-    p1 = part1 simple
-    p2 = part2bf input
+    p1 = part1 input
+    p2 = part2 input
 
     Stdout.line
         """
@@ -121,7 +134,7 @@ expect
     a == 35
 
 expect
-    a = part2bf simple
+    a = part2 simple
     a == 46
 
 simple =
