@@ -96,7 +96,7 @@ gcd = \a, b ->
 
 lcm : Nat, Nat -> Nat
 lcm = \a, b ->
-    Num.round (Num.toF64 (Num.abs (a * b)) / Num.toF64 (gcd a b))
+    Num.abs (a * b) // (gcd a b)
 
 walkLcm = \aas ->
     when aas is
