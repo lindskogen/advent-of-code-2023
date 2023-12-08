@@ -118,7 +118,11 @@ main =
 
 expect
     a = part1 simple
-    a == 0
+    a == 35
+
+expect
+    a = part2bf simple
+    a == 46
 
 simple =
     """

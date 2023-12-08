@@ -73,9 +73,21 @@ main =
 
 expect
     a = part1 simple
+    a == 142
+
+expect
+    a = part2 simple2
     a == 281
 
 simple =
+    """
+    1abc2
+    pqr3stu8vwx
+    a1b2c3d4e5f
+    treb7uchet
+    """
+
+simple2 =
     """
     two1nine
     eightwothree
