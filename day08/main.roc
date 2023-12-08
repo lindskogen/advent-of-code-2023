@@ -17,10 +17,11 @@ parseRow = \row ->
             when Str.split rest ", " is
                 [left, r] ->
                     right = Str.replaceEach r ")" ""
-                    (id, {left, right})
-                _ -> crash "split ,"
-        _ -> crash "split = ("
+                    (id, { left, right })
 
+                _ -> crash "split ,"
+
+        _ -> crash "split = ("
 
 parse = \input ->
     when Str.split input "\n\n" is
@@ -30,6 +31,7 @@ parse = \input ->
             d = Dict.fromList (List.map nodes parseRow)
 
             (dirs, d)
+
         _ -> crash "split nn"
 
 unwrap = \res, msg ->
@@ -40,10 +42,10 @@ unwrap = \res, msg ->
 walkDirs = \st, dirs, isEnd, g ->
     List.walkUntil dirs st \{ steps, loc }, dir ->
         next = step loc dir g
-        if isEnd next then 
-            Break {loc: next, steps: steps + 1}
-        else 
-            Continue {loc: next, steps: steps + 1}
+        if isEnd next then
+            Break { loc: next, steps: steps + 1 }
+        else
+            Continue { loc: next, steps: steps + 1 }
 
 loopDirs = \st, dirs, isEnd, g ->
     endState = walkDirs st dirs isEnd g
@@ -55,7 +57,7 @@ loopDirs = \st, dirs, isEnd, g ->
 
 step = \loc, dir, g ->
     when dir is
-        "L" -> Dict.get g loc |> unwrap "L" |> .left 
+        "L" -> Dict.get g loc |> unwrap "L" |> .left
         "R" -> Dict.get g loc |> unwrap "R" |> .right
         _ -> crash "unknown dir: \(dir)"
 
@@ -70,29 +72,29 @@ part1 = \input ->
 
     initial = "AAA"
 
-    loopDirs {steps: 0, loc: initial } dirs isEnd1 graph
-        |> .steps
-
-
+    loopDirs { steps: 0, loc: initial } dirs isEnd1 graph
+    |> .steps
 
 part2 = \input ->
     (dirs, graph) = parse input
 
     startingNodes = Dict.keys graph |> List.keepIf \s -> Str.endsWith s "A"
 
-    dists = startingNodes |> List.map \n -> loopDirs {steps: 0, loc: n } dirs isEnd2 graph 
-        |> .steps
+    dists =
+        startingNodes
+        |> List.map \n -> loopDirs { steps: 0, loc: n } dirs isEnd2 graph
+            |> .steps
 
     walkLcm dists
 
-gcd: Nat, Nat -> Nat
+gcd : Nat, Nat -> Nat
 gcd = \a, b ->
     if b == 0 then
         a
     else
         gcd b (a % b)
 
-lcm: Nat, Nat -> Nat
+lcm : Nat, Nat -> Nat
 lcm = \a, b ->
     Num.round (Num.toF64 (Num.abs (a * b)) / Num.toF64 (gcd a b))
 
@@ -100,8 +102,8 @@ walkLcm = \aas ->
     when aas is
         [prefix, .. as rest] ->
             List.walk rest prefix lcm
-        _ -> 0
 
+        _ -> 0
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
