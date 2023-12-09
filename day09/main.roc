@@ -113,7 +113,11 @@ main =
 
 expect
     a = part1 simple
-    a == 0
+    a == 114
+
+expect
+    a = part2 simple
+    a == 2
 
 simple =
     """
