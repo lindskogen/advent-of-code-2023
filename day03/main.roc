@@ -154,8 +154,7 @@ main : Task {} I32
 main =
     run
     |> Task.onErr \e ->
-        dbg
-            e
+        dbg e
 
         Stderr.line "Something went wrong!"
 

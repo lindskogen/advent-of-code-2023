@@ -43,7 +43,6 @@ part1 = \input ->
 
     List.sum cardScore
 
-
 part2 = \input ->
     cards = List.map (Str.split input "\n") parse
 
@@ -52,11 +51,12 @@ part2 = \input ->
         when Dict.get cache card.id is
             Ok subTally ->
                 (tally + subTally + 1, cache)
+
             Err KeyNotFound ->
-                (subTally, newCache) = 
-                    cards 
-                        |> List.sublist { start: card.id, len: numberOfWins card }
-                        |> process 0 cache
+                (subTally, newCache) =
+                    cards
+                    |> List.sublist { start: card.id, len: numberOfWins card }
+                    |> process 0 cache
                 (tally + subTally + 1, Dict.insert newCache card.id subTally)
 
     cards |> process 0 (Dict.empty {}) |> .0
@@ -77,8 +77,7 @@ main : Task {} I32
 main =
     run
     |> Task.onErr \e ->
-        dbg
-            e
+        dbg e
 
         Stderr.line "Something went wrong!"
 
