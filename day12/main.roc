@@ -30,23 +30,27 @@ getNextChars = \chars, nums ->
         ['?', .. as rest] ->
             List.prepend rest '.'
         _ -> ccs
-
-solveLine = \{ chars, nums } ->
+    
+solveLine: { chars: List U8, nums: List Nat }, Cache -> {value: Nat, map: Cache}
+solveLine = \{chars, nums}, map ->
+    insertNum = \value ->
+        { value, map: Dict.insert map (chars, nums) value }
 
     when chars is
         ['.', .. as rest] ->
-            solveLine { chars: rest, nums }
+            cachedSolveLine { chars: rest, nums } map 
 
         ['?', .. as rest] ->
-            dotPath = solveLine { chars: List.prepend rest '.', nums }
-            hashPath = solveLine { chars: List.prepend rest '#', nums }
-
-            dotPath + hashPath
+            dotPath = cachedSolveLine { chars: List.prepend rest '.', nums } map 
+            hashPath = cachedSolveLine { chars: List.prepend rest '#', nums } dotPath.map 
+            v = dotPath.value + hashPath.value
+            {value: v, map: (Dict.insert hashPath.map (chars, nums) v) }
+            
 
         ['#', .. as rest] ->
             when List.get nums 0 is
                 Err _ -> 
-                    0
+                    insertNum 0
                 Ok firstNum ->
                     match = List.takeFirst chars firstNum
 
@@ -55,31 +59,43 @@ solveLine = \{ chars, nums } ->
                     if List.len match == firstNum && List.all match \m -> m != '.' then
                         nextChars = getNextChars chars firstNum
                         if List.get nextChars 0 != Ok '#' then
-                            solveLine { chars: nextChars, nums: List.dropFirst nums 1 }
+                            cachedSolveLine { chars: nextChars, nums: List.dropFirst nums 1 } map 
                         else
-                            0
+                            insertNum 0
                     else
-                        0
+                        insertNum 0
 
         [] ->
             if List.len nums > 0 then
-                0
+                insertNum 0
             else
-                1
+                insertNum 1
 
         c ->
             crash "what is \(Inspect.toStr c)"
 
+Cache: Dict (List U8, List Nat) Nat
+
+cachedSolveLine: { chars: List U8, nums: List Nat }, Cache -> { value: Nat, map: Cache }
+cachedSolveLine = \{ chars, nums }, map ->
+    when Dict.get map (chars, nums) is
+        Ok v ->
+            {value: v, map}
+        _ -> 
+            {map: newMap, value: v } = solveLine { chars, nums } map
+
+            {value: v, map: (Dict.insert newMap (chars, nums) v) }
+
 part1 = \input ->
     Str.split input "\n" 
     |> List.map \l -> parseLine l 1
-    |> List.map solveLine 
+    |> List.map \l -> (cachedSolveLine l (Dict.empty {}) |> .value)
     |> List.sum
 
 part2 = \input ->
     Str.split input "\n" 
     |> List.map \l -> parseLine l 5
-    |> List.map solveLine 
+    |> List.map \l -> (cachedSolveLine l (Dict.empty {}) |> .value)
     |> List.sum
 
 run =
