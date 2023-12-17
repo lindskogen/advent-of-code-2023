@@ -16,10 +16,10 @@ unwrap = \res, msg ->
         Ok v -> v
         Err _ -> crash "unwrapped value \(msg)"
 
-parseLine = \line ->
+parseLine = \line, repeatCount ->
     { before, after } = Str.splitFirst line " " |> unwrap "missing space on line \(line)"
-    chars = Str.toUtf8 before
-    nums = Str.split after "," |> List.keepOks Str.toNat
+    chars = Str.toUtf8 (Str.joinWith (List.repeat before repeatCount) "?")
+    nums = Str.split after "," |> List.keepOks Str.toNat |> List.repeat repeatCount |> List.join
 
     { chars, nums }
 
@@ -71,12 +71,16 @@ solveLine = \{ chars, nums } ->
             crash "what is \(Inspect.toStr c)"
 
 part1 = \input ->
-    lines = Str.split input "\n" |> List.map parseLine
+    Str.split input "\n" 
+    |> List.map \l -> parseLine l 1
+    |> List.map solveLine 
+    |> List.sum
 
-    List.map lines solveLine |> List.sum
-
-part2 = \_input ->
-    0
+part2 = \input ->
+    Str.split input "\n" 
+    |> List.map \l -> parseLine l 5
+    |> List.map solveLine 
+    |> List.sum
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
@@ -99,16 +103,27 @@ main =
         Stderr.line "Something went wrong!"
 
 
-expect solveLine (parseLine "???.### 1,1,3") == 1
-expect solveLine (parseLine ".??..??...?##. 1,1,3") == 4
-expect solveLine (parseLine "?#?#?#?#?#?#?#? 1,3,1,6") == 1
-expect solveLine (parseLine "????.#...#... 4,1,1") == 1
-expect solveLine (parseLine "????.######..#####. 1,6,5") == 4
-expect solveLine (parseLine "?###???????? 3,2,1") == 10
+expect part1 "???.### 1,1,3" == 1
+expect part1 ".??..??...?##. 1,1,3" == 4
+expect part1 "?#?#?#?#?#?#?#? 1,3,1,6" == 1
+expect part1 "????.#...#... 4,1,1" == 1
+expect part1 "????.######..#####. 1,6,5" == 4
+expect part1 "?###???????? 3,2,1" == 10
+
+expect part2 "???.### 1,1,3" == 1
+expect part2 ".??..??...?##. 1,1,3" == 16384
+expect part2 "?#?#?#?#?#?#?#? 1,3,1,6" == 1
+expect part2 "????.#...#... 4,1,1" == 16
+expect part2 "????.######..#####. 1,6,5" == 2500
+expect part2 "?###???????? 3,2,1" == 506250
 
 expect
     a = part1 simple
     a == 21
+
+expect
+    a = part2 simple
+    a == 525152
 
 simple =
     """
