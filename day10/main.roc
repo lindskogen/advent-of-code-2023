@@ -15,6 +15,17 @@ app "day00"
 
 Dir : [North, South, East, West]
 
+shoelaceFormula : List { x : I64, y : I64 } -> I64
+shoelaceFormula = \vertices ->
+    n = List.len vertices
+
+    area = List.walkWithIndex vertices 0 \sum, { x: x1, y: y1 }, index ->
+        { x: x2, y: y2 } = List.get vertices ((index + 1) % n) |> unwrap "index issue"
+
+        sum + (x1 * y2 - x2 * y1)
+
+    (Num.abs area)
+
 invertDir = \d ->
     when d is
         North -> South
@@ -64,17 +75,10 @@ unwrap = \res, msg ->
 findStart = \g ->
     Array2D.findFirstIndex g \c -> c == "S"
 
-State : { prev : Array2D.Index, dists : Dict Array2D.Index I64, dist : I64 }
+State : { prev: Array2D.Index, corners: List {x: I64, y: I64}, dist : I64 }
 
-debug = \d ->
-    dbg d
-
-    d
-
-updateIfLower = \r, v ->
-    when r is
-        Present c -> if v < c then Present v else Present c
-        Missing -> Present v
+indexToI64 = \idx ->
+    {x: Num.toI64 idx.x, y: Num.toI64 idx.y }
 
 walk : Array2D Str, State, Dir -> State
 walk = \g, s, dir ->
@@ -85,38 +89,52 @@ walk = \g, s, dir ->
             c = Array2D.get g pos |> Result.withDefault "."
 
             if c == "S" then
-                { prev: pos, dist: s.dist, dists: Dict.update s.dists pos (\r -> updateIfLower r s.dist) }
+                { corners: List.append s.corners (indexToI64 pos), prev: pos, dist: s.dist }
             else
                 nextDir = possibleDirs c |> List.findFirst (\d -> d != cameFrom) |> unwrap "asas"
 
-                walk g { prev: pos, dists: Dict.update s.dists pos (\r -> updateIfLower r s.dist), dist: s.dist + 1 } nextDir
+                walk g { prev: pos, corners: List.append s.corners (indexToI64 pos), dist: s.dist + 1 } nextDir
 
         Err _ -> crash "invalid pos"
 
+firstAvailableDir = \g, pos ->
+    (possibleDirs "S")
+    |> List.findFirst \d ->
+        when indexFromDirAndPos pos d is
+            Err _ -> Bool.false
+            Ok i ->
+                destSym = Array2D.get g i |> Result.withDefault "."
+                incomingDirs = possibleDirs destSym
+
+                List.contains incomingDirs (invertDir d)
+    |> unwrap "no first valid dir"
+
 part1 = \input ->
     g = parse input
-
     start = findStart g |> unwrap "missing start position"
+    dir = firstAvailableDir g start
 
-    a =
-        (possibleDirs "S")
-        |> List.keepIf \d ->
-            when indexFromDirAndPos start d is
-                Err _ -> Bool.false
-                Ok i ->
-                    destSym = Array2D.get g i |> Result.withDefault "."
-                    incomingDirs = possibleDirs destSym
+    len = (walk g { dist: 1, prev: start, corners: [] } dir) 
+        |> .dist 
+    
+    len // 2
 
-                    List.contains incomingDirs (invertDir d)
 
-    res = List.walk a (Dict.single start 0) \dists, dir ->
-        (walk g { dists, dist: 1, prev: start } dir) |> .dists
+collectPoints = \g ->
+    start = findStart g |> unwrap "missing start position"
+    dir = firstAvailableDir g start
+    corners = walk g { dist: 1, prev: start, corners: [] } dir
+        |> .corners
 
-    res |> Dict.values |> List.max |> unwrap "no max value"
+    List.append corners (indexToI64 start)
 
-part2 = \_input ->
-    0
 
+part2 = \input ->
+    points = List.reverse (collectPoints (parse input))
+    len = Num.toI64 (List.len points)
+
+    (shoelaceFormula points - len + 3) // 2
+    
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
 
@@ -141,6 +159,14 @@ expect
     a = part1 simple
     a == 8
 
+expect
+    a = part2 simple2
+    a == 8
+
+expect
+    a = part2 simple3
+    a == 10
+
 simple =
     """
     ..F7.
@@ -148,4 +174,33 @@ simple =
     SJ.L7
     |F--J
     LJ...    
+    """
+
+simple2 =
+    """
+    .F----7F7F7F7F-7....
+    .|F--7||||||||FJ....
+    .||.FJ||||||||L7....
+    FJL7L7LJLJ||LJ.L-7..
+    L--J.L7...LJS7F-7L7.
+    ....F-J..F7FJ|L7L7L7
+    ....L7.F7||L7|.L7L7|
+    .....|FJLJ|FJ|F7|.LJ
+    ....FJL-7.||.||||...
+    ....L---J.LJ.LJLJ...  
+    """
+
+simple3 =
+    """
+    FF7FSF7F7F7F7F7F---7
+    L|LJ||||||||||||F--J
+    FL-7LJLJ||||||LJL-77
+    F--JF--7||LJLJ7F7FJ-
+    L---JF-JLJ.||-FJLJJ7
+    |F|F-JF---7F7-L7L|7|
+    |FFJF7L7F-JF7|JL---7
+    7-L-JL7||F7|L7F-7F7|
+    L.L7LFJ|||||FJL7||LJ
+    L7JLJL-JLJLJL--JLJ.L
+    ....L---J.LJ.LJLJ...  
     """
