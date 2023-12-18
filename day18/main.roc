@@ -11,42 +11,45 @@ app "day00"
     ]
     provides [main] to pf
 
+Dir : [North, South, East, West]
+
 unwrap = \res, msg ->
     when res is
         Ok v -> v
         Err _ -> crash "unwrapped value \(msg)"
 
-indexFromDirAndPos = \{ x, y }, dir ->
+indexFromDirAndPosWithStep = \{ x, y }, dir, step ->
     when dir is
-        North -> { y, x: x - 1 }
-        South -> { y, x: x + 1 }
-        East -> { y: y + 1, x }
-        West -> { x, y: y - 1 }
+        North -> { y, x: x - step }
+        South -> { y, x: x + step }
+        East -> { y: y + step, x }
+        West -> { x, y: y - step }
 
 parseDir = \str ->
-    when str is 
-        "R" -> East
-        "L" -> West
-        "U" -> North
-        "D" -> South
+    when str is
         "0" -> East
+        "R" -> East
         "1" -> South
+        "D" -> South
         "2" -> West
+        "L" -> West
         "3" -> North
+        "U" -> North
         _ -> crash "invalid dir \(str)"
 
 parse = \input ->
-    Str.split input "\n" 
-    |> List.map \l -> 
+    Str.split input "\n"
+    |> List.map \l ->
         when Str.split l " " is
             [d, n, _] -> { dir: parseDir d, steps: Str.toNat n |> unwrap "invalid step count" }
             _ -> crash "invalid line: \(l)"
 
 parseHex = \str ->
-    len = Str.countUtf8Bytes str
-
-    Str.walkUtf8WithIndex str 0 \acc, s, i ->
-        acc + 16 * (len - i) * when s is
+    Str.walkUtf8 str 0 \acc, s ->
+        acc
+        * 16
+        +
+        when s is
             '0' -> 0
             '1' -> 1
             '2' -> 2
@@ -65,6 +68,11 @@ parseHex = \str ->
             'f' -> 15
             _ -> crash "out of range"
 
+expect parseHex "ff" == 255
+expect parseHex "70c71" == 461937
+expect parseHex "0dc57" == 56407
+expect parseHex "01523" == 5411
+
 parseInstr2 = \str ->
     hex = Str.graphemes str
     num = List.takeFirst hex 5 |> Str.joinWith "" |> parseHex
@@ -72,81 +80,59 @@ parseInstr2 = \str ->
     { dir: parseDir d, steps: num }
 
 parse2 = \input ->
-    Str.split input "\n" 
-    |> List.map \l -> 
+    Str.split input "\n"
+    |> List.map \l ->
         when Str.split l " " is
-            [_, _, str] -> parseInstr2 (str |>  Str.replaceEach "(" "" |>  Str.replaceEach ")" "" |>  Str.replaceEach "#" "")
+            [_, _, str] -> parseInstr2 (str |> Str.replaceEach "(" "" |> Str.replaceEach ")" "" |> Str.replaceEach "#" "")
             _ -> crash "invalid line: \(l)"
 
-addAllInstrs = \instrs, initialPos ->
-    List.walk instrs {points: Set.single initialPos, pos: initialPos} \parentState, instr ->
-        List.walk (List.repeat instr.dir instr.steps) parentState \{ points, pos }, dir ->
-            nextPos = indexFromDirAndPos pos dir
-            { points: Set.insert points nextPos, pos: nextPos }
+addAllVertices : List { dir : Dir, steps : Nat }, { x : I64, y : I64 } -> List { x : I64, y : I64 }
+addAllVertices = \instrs, initialPos ->
+    List.walk instrs { points: [], pos: initialPos } \{ points, pos }, { dir, steps } ->
+        nextPos = indexFromDirAndPosWithStep pos dir (Num.toI64 steps)
+        { points: List.append points nextPos, pos: nextPos }
+    |> .points
 
-calculateShape = \frame ->
-    Set.walk frame { maxX: 0i32, maxY: 0i32 } \{ maxX, maxY }, key ->
-        { 
-            maxY: if key.y > maxY then key.y else maxY, 
-            maxX: if key.x > maxX then key.x else maxX, 
-        }
+shoelaceFormula : List { x : I64, y : I64 } -> I64
+shoelaceFormula = \vertices ->
+    n = List.len vertices
 
-debugFrame = \frame, shape ->
-    xs = List.range { start: At 0, end: At shape.maxX }
-    ys = List.range { start: At 0, end: At shape.maxY }
+    area = List.walkWithIndex vertices 0 \sum, { x: x1, y: y1 }, index ->
+        { x: x2, y: y2 } = List.get vertices ((index + 1) % n) |> unwrap "index issue"
 
-    _ = List.walk xs {} \_, x ->
-        r = List.walk ys [] \list, y ->
-                List.append list (if Set.contains frame {x, y} then "#" else ".")
-            |> Str.joinWith ""
-        dbg r
-        {}
-    {}
+        sum + (x1 * y2 - x2 * y1)
 
-moveToInsideFrame = \{ x, y } ->
-    {x: x + 1, y: y + 1}
+    (Num.abs area) // 2
 
-floodFill = \frame, node ->
-    if Set.contains frame node then 
-        frame
-    else
-        List.walk  [North, South, East, West] (Set.insert frame node) \fr, dir ->
-            floodFill fr (indexFromDirAndPos node dir)
+trenchLength = \frame ->
+    n = List.len frame
 
+    List.walkWithIndex frame 0 \sum, { x: x1, y: y1 }, index ->
+        { x: x2, y: y2 } = List.get frame ((index + 1) % n) |> unwrap "index issue"
+
+        sum + Num.abs (x1 - x2) + Num.abs (y1 - y2)
 
 part1 = \input ->
-    instrs = parse input 
+    instrs = parse input
 
-    initialPos = { x: 0i32, y: 0i32 }
+    initialPos = { x: 0i64, y: 0i64 }
 
-    frame = addAllInstrs instrs initialPos |> .points
+    frame = addAllVertices instrs initialPos
 
-    shape = calculateShape frame
-    
-    lagoon = floodFill frame (moveToInsideFrame initialPos)
+    len = trenchLength frame
 
-    Set.len lagoon
-
-
+    shoelaceFormula frame + (len // 2) + 1
 
 part2 = \input ->
-    instrs = parse2 input 
+    instrs = parse2 input
 
-    initialPos = { x: 0i32, y: 0i32 }
+    initialPos = { x: 0i64, y: 0i64 }
 
-    frame = addAllInstrs instrs initialPos |> .points
+    frame = addAllVertices instrs initialPos
 
-    dbg "frame done"
+    len = trenchLength frame
 
-    shape = calculateShape frame
-
-    dbg "shape done"
-
-    lagoon = floodFill frame (moveToInsideFrame initialPos)
-
-    dbg "fill done"
-
-    Set.len lagoon
+    shoelaceFormula frame + len // 2 + 1
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
@@ -164,8 +150,7 @@ main : Task {} I32
 main =
     run
     |> Task.onErr \e ->
-        dbg
-            e
+        dbg e
 
         Stderr.line "Something went wrong!"
 
