@@ -1,4 +1,4 @@
-app "day00"
+app "day16"
     packages {
         pf: "https://github.com/roc-lang/basic-cli/releases/download/0.7.0/bkGby8jb0tmZYsy2hg1E_B2QrCgcSTxdUlHtETwm5m4.tar.br",
         array2d: "https://github.com/mulias/roc-array2d/releases/download/v0.1.0/ssMT0bDIv-qE7d_yNUyCByGQHvpNkQJZsGUS6xEFsIY.tar.br",
@@ -13,73 +13,78 @@ app "day00"
     ]
     provides [main] to pf
 
+Dir : [East, North, South, West]
+WorkCache : Set (Array2D.Index, Dir)
+
+unwrap = \res, msg ->
+    when res is
+        Ok v -> v
+        Err _ -> crash "unwrapped value \(msg)"
+
 parse = \input ->
     Str.split input "\n"
     |> List.map Str.graphemes
     |> Array2D.fromLists (FitLongest ".")
 
-reflectOnMirror = \str, dir ->
-    when str is
-        "/" ->
+parseDir = \g, pos, dir ->
+    when Array2D.get g pos is
+        Ok "." -> Step dir
+        Ok "|" ->
             when dir is
-                North -> East
-                South -> West
-                East -> North
-                West -> South
+                East | West -> Split North South
+                _ -> Step dir
 
-        "\\" ->
+        Ok "-" ->
             when dir is
-                North -> West
-                West -> North
-                South -> East
-                East -> South
+                North | South -> Split East West
+                _ -> Step dir
 
-        _ -> crash "invalid str \(str)"
+        Ok "/" ->
+            when dir is
+                North -> Step East
+                South -> Step West
+                East -> Step North
+                West -> Step South
 
-Dir : [East, North, South, West]
-WorkCache : Set (Array2D.Index, Dir)
+        Ok "\\" ->
+            when dir is
+                North -> Step West
+                West -> Step North
+                South -> Step East
+                East -> Step South
+
+        _ -> End
 
 splitBeam : Array2D Str, WorkCache, Array2D.Index, Dir, Dir -> WorkCache
 splitBeam = \g, energizedTiles, pos, d1, d2 ->
-    g1 = followBeam g (Set.insert energizedTiles (pos, d1)) pos d1
-    followBeam g (Set.insert g1 (pos, d2)) pos d2
+    newVisited =
+        when indexFromDirAndPos pos d1 is
+            Ok newPos -> followBeam g energizedTiles newPos d1
+            Err _ -> energizedTiles
+
+    when indexFromDirAndPos pos d2 is
+        Ok newPos -> followBeam g newVisited newPos d2
+        Err _ -> newVisited
 
 followBeam : Array2D Str, WorkCache, Array2D.Index, Dir -> WorkCache
 followBeam = \g, energizedTiles, pos, dir ->
+    if Set.contains energizedTiles (pos, dir) then
+        energizedTiles
+    else
+        nextDir = parseDir g pos dir
 
-    when indexFromDirAndPos pos dir is
-        Err _ -> energizedTiles
-        Ok newPos ->
-            if Set.contains energizedTiles (newPos, dir) then
-                energizedTiles
-            else
-                when (Array2D.get g newPos, dir) is
-                    (Ok ".", _) -> followBeam g (Set.insert energizedTiles (newPos, dir)) newPos dir
-                    (Ok "/", _) -> followBeam g (Set.insert energizedTiles (newPos, dir)) newPos (reflectOnMirror "/" dir)
-                    (Ok "\\", _) -> followBeam g (Set.insert energizedTiles (newPos, dir)) newPos (reflectOnMirror "\\" dir)
-                    (Ok "|", North) -> followBeam g (Set.insert energizedTiles (newPos, dir)) newPos dir
-                    (Ok "|", South) -> followBeam g (Set.insert energizedTiles (newPos, dir)) newPos dir
-                    (Ok "-", East) -> followBeam g (Set.insert energizedTiles (newPos, dir)) newPos dir
-                    (Ok "-", West) -> followBeam g (Set.insert energizedTiles (newPos, dir)) newPos dir
-                    (Ok "|", East) ->
-                        splitBeam g energizedTiles newPos South North
+        when nextDir is
+            Step d ->
+                newVisited = Set.insert energizedTiles (pos, dir)
+                when indexFromDirAndPos pos d is
+                    Err _ -> newVisited
+                    Ok newPos -> followBeam g newVisited newPos d
 
-                    (Ok "|", West) ->
-                        splitBeam g energizedTiles newPos South North
+            Split d1 d2 ->
+                newVisited = Set.insert energizedTiles (pos, dir)
+                splitBeam g newVisited pos d1 d2
 
-                    (Ok "-", North) ->
-                        splitBeam g energizedTiles newPos East West
-
-                    (Ok "-", South) ->
-                        splitBeam g energizedTiles newPos East West
-
-                    (Err _, _) ->
-                        energizedTiles
-
-                    (a, b) ->
-                        dbg (a, b)
-
-                        crash "unhandled case"
+            End -> energizedTiles
 
 indexFromDirAndPos = \{ x, y }, dir ->
     when dir is
@@ -99,17 +104,48 @@ indexFromDirAndPos = \{ x, y }, dir ->
 
         _ -> Err OutOfBounds
 
+countUniq = \set ->
+    set
+    |> Set.map \(p, _) -> p
+    |> Set.len
+
 part1 = \input ->
     g = parse input
     pos = { x: 0, y: 0 }
     initialDir = East
 
-    followBeam g (Set.single (pos, initialDir)) pos initialDir
-    |> Set.map \(p, _) -> p
-    |> Set.len
+    followBeam g (Set.empty {}) pos initialDir
+    |> countUniq
 
-part2 = \_input ->
-    0
+part2 = \input ->
+    g = parse input
+    { dimY, dimX } = Array2D.shape g
+
+    east =
+        List.range { start: At 0, end: Before dimX }
+        |> List.map (\i -> followBeam g (Set.empty {}) { x: i, y: 0 } East |> countUniq)
+        |> List.max
+        |> unwrap "East: no max"
+
+    west =
+        List.range { start: At 0, end: Before dimX }
+        |> List.map (\i -> followBeam g (Set.empty {}) { x: i, y: (dimY - 1) } West |> countUniq)
+        |> List.max
+        |> unwrap "West: no max"
+
+    north =
+        List.range { start: At 0, end: Before dimY }
+        |> List.map (\i -> followBeam g (Set.empty {}) { x: (dimX - 1), y: i } North |> countUniq)
+        |> List.max
+        |> unwrap "North: no max"
+
+    south =
+        List.range { start: At 0, end: Before dimY }
+        |> List.map (\i -> followBeam g (Set.empty {}) { x: 0, y: i } South |> countUniq)
+        |> List.max
+        |> unwrap "South: no max"
+
+    [east, west, north, south] |> List.max |> unwrap "Total: no max"
 
 run =
     input <- File.readUtf8 (Path.fromStr "input") |> Task.await
@@ -134,6 +170,10 @@ main =
 expect
     a = part1 simple
     a == 46
+
+expect
+    a = part2 simple
+    a == 51
 
 simple =
     """
