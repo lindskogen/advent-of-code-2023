@@ -23,30 +23,30 @@ unwrap = \res, msg ->
 
 parse = \input ->
     Str.split input "\n"
-    |> List.map Str.graphemes
-    |> Array2D.fromLists (FitLongest ".")
+    |> List.map Str.toUtf8
+    |> Array2D.fromLists (FitLongest '.')
 
 parseDir = \g, pos, dir ->
     when Array2D.get g pos is
-        Ok "." -> Step dir
-        Ok "|" ->
+        Ok '.' -> Step dir
+        Ok '|' ->
             when dir is
                 East | West -> Split North South
                 _ -> Step dir
 
-        Ok "-" ->
+        Ok '-' ->
             when dir is
                 North | South -> Split East West
                 _ -> Step dir
 
-        Ok "/" ->
+        Ok '/' ->
             when dir is
                 North -> Step East
                 South -> Step West
                 East -> Step North
                 West -> Step South
 
-        Ok "\\" ->
+        Ok '\\' ->
             when dir is
                 North -> Step West
                 West -> Step North
@@ -55,7 +55,7 @@ parseDir = \g, pos, dir ->
 
         _ -> End
 
-splitBeam : Array2D Str, WorkCache, Array2D.Index, Dir, Dir -> WorkCache
+splitBeam : Array2D U8, WorkCache, Array2D.Index, Dir, Dir -> WorkCache
 splitBeam = \g, energizedTiles, pos, d1, d2 ->
     newVisited =
         when indexFromDirAndPos pos d1 is
@@ -66,7 +66,7 @@ splitBeam = \g, energizedTiles, pos, d1, d2 ->
         Ok newPos -> followBeam g newVisited newPos d2
         Err _ -> newVisited
 
-followBeam : Array2D Str, WorkCache, Array2D.Index, Dir -> WorkCache
+followBeam : Array2D U8, WorkCache, Array2D.Index, Dir -> WorkCache
 followBeam = \g, energizedTiles, pos, dir ->
     if Set.contains energizedTiles (pos, dir) then
         energizedTiles
